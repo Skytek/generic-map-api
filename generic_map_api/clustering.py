@@ -37,6 +37,9 @@ class Clustering:
             else:
                 yield item
 
+        if not points_to_cluster:
+            return
+
         dataset = np.array(points_to_cluster)
 
         clustering = DBSCAN(**self.get_clustering_params(config)).fit(dataset)

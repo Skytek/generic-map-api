@@ -31,7 +31,7 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
             "type": "Features",
             "name": self.display_name,
             "clustering": self.clustering,
-            "query_params": self._render_query_params_meta(),
+            "query_params": self._render_query_params_meta(request),
             "urls": {
                 "list": self.reverse_action("list"),
                 "detail": self.reverse_action("detail", kwargs={"pk": "ID"}),
@@ -101,9 +101,9 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     def get_query_params(self):
         return self.query_params
 
-    def _render_query_params_meta(self):
+    def _render_query_params_meta(self, request):
         return {
-            param.name: param.render_meta()
+            param.name: param.render_meta(self, request)
             for param in self.get_query_params().values()
         }
 
@@ -116,6 +116,10 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
 
     def _parse_params(self, request):
         return {
-            param.name: param.parse_request(request)
-            for param in self.query_params.values()
+            param: value
+            for param, value in {
+                param.name: param.parse_request(request)
+                for param in self.query_params.values()
+            }.items()
+            if value is not None
         }

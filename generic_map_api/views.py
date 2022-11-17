@@ -91,7 +91,7 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
             return Response(status=504)
 
     @abstractmethod
-    def get_items(self, viewport: ViewPort, filters: dict):
+    def get_items(self, viewport: ViewPort, params: dict):
         pass
 
     @abstractmethod

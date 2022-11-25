@@ -1,5 +1,6 @@
 include generic_map_api/VERSION
 recursive-include requirements *.txt
+recursive-include generic_map_api/resources *
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from dateutil.parser import parse as parse_date
@@ -67,16 +68,32 @@ class Date(Base):
 class Select(Base):
     type = "select"
 
+    @dataclass
+    class Choice:
+        value: str
+        label: str
+
     def __init__(  # pylint: disable=too-many-arguments
         self, label, many=False, frontend_only=False, default=None, choices=None
     ) -> None:
         super().__init__(label, many, frontend_only, default)
-        self.choices = choices or {}
+        self.choices = choices or []
 
     def render_meta(self, view: MapApiBaseView, request: HttpRequest):
         meta = super().render_meta(view, request)
-        meta = {**meta, "choices": self.render_choices(view, request)}
+        meta = {
+            **meta,
+            "choices": [
+                self._choice_to_dict(choice)
+                for choice in self.render_choices(view, request)
+            ],
+        }
         return meta
+
+    def _choice_to_dict(self, choice):
+        if isinstance(choice, dict):
+            return choice
+        return asdict(choice)
 
     def render_choices(self, view: MapApiBaseView, request: HttpRequest) -> list:
         if callable(self.choices):

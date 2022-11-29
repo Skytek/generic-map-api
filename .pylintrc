@@ -563,6 +563,7 @@ good-names=i,
            id,
            x,
            y,
+           z,
            f,
            pk,
            _

@@ -38,8 +38,8 @@ class ViewPort:
                 lon2_err,
             ) = geohash2.decode_exactly(geohashes_arr[0])
 
-        upper_left, lower_right = Point(lon1 - lon1_err, lat1 - lat1_err), Point(
-            lon2 + lon2_err, lat2 + lat2_err
+        upper_left, lower_right = Point(lon1 - lon1_err, lat1 + lat1_err), Point(
+            lon2 + lon2_err, lat2 - lat2_err
         )
 
         return cls(upper_left, lower_right)

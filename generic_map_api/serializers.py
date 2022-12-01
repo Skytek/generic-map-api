@@ -1,5 +1,5 @@
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Tuple
+from typing import Tuple, Union
 
 from django.contrib.gis.geos import LineString as GeosLineString
 from django.contrib.gis.geos import MultiPolygon as GeosMultiPolygon
@@ -13,6 +13,30 @@ from shapely.geometry import Polygon as ShapelyPolygon
 
 def flip_coords(lon_lat: Tuple[float, float]):
     return lon_lat[1], lon_lat[0]
+
+
+def make_boundary_box_from_geos_geometry(
+    geometry,
+) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+    if isinstance(geometry, GeosPoint):
+        return flip_coords(geometry.coords)
+
+    envelope = geometry.envelope
+    if isinstance(envelope, GeosPoint):
+        return flip_coords(envelope.coords)
+
+    coords = envelope.shell.coords
+    return flip_coords(coords[0]), flip_coords(coords[2])
+
+
+def make_boundary_box_from_shapely_geometry(
+    geometry,
+) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+    if isinstance(geometry, ShapelyPoint):
+        flip_coords(geometry.coords[0])
+
+    bounds = geometry.bounds
+    return flip_coords(bounds[0:2]), flip_coords(bounds[2:4])
 
 
 class FeatureSerializerMeta(ABCMeta):
@@ -39,6 +63,7 @@ class BaseFeatureSerializer(ABC, metaclass=FeatureSerializerMeta):
             "type": self.get_type(obj),
             "id": self.get_id(obj),
             "geom": self.get_frontend_style_geometry(obj),
+            "bbox": self.get_boundary_box(obj),
         }
 
     def get_type(self, obj):  # pylint: disable=unused-argument
@@ -54,9 +79,21 @@ class BaseFeatureSerializer(ABC, metaclass=FeatureSerializerMeta):
     def make_frontend_style_geometry(self, geometry):
         pass
 
+    @abstractmethod
+    def make_boundary_box(
+        self, geometry
+    ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+        pass
+
     def get_frontend_style_geometry(self, obj):
         geometry = self.get_geometry(obj)  # pylint: disable=assignment-from-none
         return self.make_frontend_style_geometry(geometry)
+
+    def get_boundary_box(
+        self, obj
+    ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+        geometry = self.get_geometry(obj)  # pylint: disable=assignment-from-none
+        return self.make_boundary_box(geometry)
 
 
 class PointSerializer(BaseFeatureSerializer):
@@ -67,7 +104,20 @@ class PointSerializer(BaseFeatureSerializer):
             return flip_coords(geometry.coords)
         if isinstance(geometry, ShapelyPoint):
             return flip_coords(geometry.coords[0])
-        raise ValueError()
+        raise ValueError(
+            f"Cannot make frontend geometry from {geometry.__class__} in {self.__class__}"
+        )
+
+    def make_boundary_box(
+        self, geometry
+    ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+        if isinstance(geometry, ShapelyPoint):
+            return make_boundary_box_from_shapely_geometry(geometry)
+        if isinstance(geometry, GeosPoint):
+            return make_boundary_box_from_geos_geometry(geometry)
+        raise ValueError(
+            f"Cannot get boundary box of {geometry.__class__} in {self.__class__}"
+        )
 
 
 class LineSerializer(BaseFeatureSerializer):
@@ -76,7 +126,20 @@ class LineSerializer(BaseFeatureSerializer):
     def make_frontend_style_geometry(self, geometry):
         if isinstance(geometry, (GeosLineString, ShapelyLineString)):
             return tuple(flip_coords(point) for point in geometry.coords)
-        raise ValueError()
+        raise ValueError(
+            f"Cannot make frontend geometry from {geometry.__class__} in {self.__class__}"
+        )
+
+    def make_boundary_box(
+        self, geometry
+    ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+        if isinstance(geometry, ShapelyLineString):
+            return make_boundary_box_from_shapely_geometry(geometry)
+        if isinstance(geometry, GeosLineString):
+            return make_boundary_box_from_geos_geometry(geometry)
+        raise ValueError(
+            f"Cannot get boundary box of {geometry.__class__} in {self.__class__}"
+        )
 
 
 class PolygonSerializer(BaseFeatureSerializer):
@@ -86,8 +149,21 @@ class PolygonSerializer(BaseFeatureSerializer):
         if isinstance(geometry, GeosPolygon):
             return tuple(flip_coords(point) for point in geometry.shell.coords)
         if isinstance(geometry, ShapelyPolygon):
-            ...  # @TODO
-        raise ValueError()
+            return tuple(flip_coords(point) for point in geometry.exterior.coords)
+        raise ValueError(
+            f"Cannot make frontend geometry from {geometry.__class__} in {self.__class__}"
+        )
+
+    def make_boundary_box(
+        self, geometry
+    ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+        if isinstance(geometry, ShapelyPolygon):
+            return make_boundary_box_from_shapely_geometry(geometry)
+        if isinstance(geometry, GeosPolygon):
+            return make_boundary_box_from_geos_geometry(geometry)
+        raise ValueError(
+            f"Cannot get boundary box of {geometry.__class__} in {self.__class__}"
+        )
 
 
 class MultiPolygonSerializer(BaseFeatureSerializer):
@@ -98,7 +174,20 @@ class MultiPolygonSerializer(BaseFeatureSerializer):
             ...  # @TODO
         if isinstance(geometry, ShapelyMultiPolygon):
             ...  # @TODO
-        raise ValueError()
+        raise ValueError(
+            f"Cannot make frontend geometry from {geometry.__class__} in {self.__class__}"
+        )
+
+    def make_boundary_box(
+        self, geometry
+    ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
+        if isinstance(geometry, ShapelyMultiPolygon):
+            return make_boundary_box_from_shapely_geometry(geometry)
+        if isinstance(geometry, GeosMultiPolygon):
+            return make_boundary_box_from_geos_geometry(geometry)
+        raise ValueError(
+            f"Cannot get boundary box of {geometry.__class__} in {self.__class__}"
+        )
 
 
 class ClusterSerializer(PointSerializer):

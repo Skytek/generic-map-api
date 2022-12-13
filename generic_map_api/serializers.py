@@ -33,7 +33,7 @@ def make_boundary_box_from_shapely_geometry(
     geometry,
 ) -> Union[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[float, float]]:
     if isinstance(geometry, ShapelyPoint):
-        flip_coords(geometry.coords[0])
+        return flip_coords(geometry.coords[0])
 
     bounds = geometry.bounds
     return flip_coords(bounds[0:2]), flip_coords(bounds[2:4])
@@ -48,9 +48,11 @@ class FeatureSerializerMeta(ABCMeta):
     @classmethod
     def _build_feature_type_list(cls, created_class):
         return tuple(
-            c.feature_type
-            for c in created_class.__mro__
-            if getattr(c, "feature_type", None)
+            {
+                c.feature_type: None
+                for c in created_class.__mro__
+                if getattr(c, "feature_type", None)
+            }.keys()
         )
 
 
@@ -147,9 +149,20 @@ class PolygonSerializer(BaseFeatureSerializer):
 
     def make_frontend_style_geometry(self, geometry):
         if isinstance(geometry, GeosPolygon):
-            return tuple(flip_coords(point) for point in geometry.shell.coords)
+            if len(geometry) == 1:
+                return tuple(flip_coords(point) for point in geometry.shell.coords)
+
+            return tuple(
+                tuple(flip_coords(point) for point in ring.coords) for ring in geometry
+            )
         if isinstance(geometry, ShapelyPolygon):
-            return tuple(flip_coords(point) for point in geometry.exterior.coords)
+            if not geometry.interiors:
+                return tuple(flip_coords(point) for point in geometry.exterior.coords)
+
+            return tuple(
+                tuple(flip_coords(point) for point in ring.coords)
+                for ring in (geometry.exterior,) + tuple(geometry.interiors)
+            )
         raise ValueError(
             f"Cannot make frontend geometry from {geometry.__class__} in {self.__class__}"
         )
@@ -171,9 +184,21 @@ class MultiPolygonSerializer(BaseFeatureSerializer):
 
     def make_frontend_style_geometry(self, geometry):
         if isinstance(geometry, GeosMultiPolygon):
-            ...  # @TODO
+            return tuple(
+                tuple(
+                    tuple(flip_coords(point) for point in ring.coords)
+                    for ring in polygon
+                )
+                for polygon in geometry
+            )
         if isinstance(geometry, ShapelyMultiPolygon):
-            ...  # @TODO
+            return tuple(
+                tuple(
+                    tuple(flip_coords(point) for point in ring.coords)
+                    for ring in (polygon.exterior,) + tuple(polygon.interiors)
+                )
+                for polygon in geometry.geoms
+            )
         raise ValueError(
             f"Cannot make frontend geometry from {geometry.__class__} in {self.__class__}"
         )

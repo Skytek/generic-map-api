@@ -1,5 +1,6 @@
-from generic_map_api.values import ViewPort
 from shapely.geometry import Point
+
+from generic_map_api.values import ViewPort
 
 
 def test_viewport_from_geohashes():

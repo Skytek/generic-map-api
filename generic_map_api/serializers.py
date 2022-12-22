@@ -68,6 +68,12 @@ class BaseFeatureSerializer(ABC, metaclass=FeatureSerializerMeta):
             "bbox": self.get_boundary_box(obj),
         }
 
+    def serialize_details(self, obj):
+        return {
+            "type": self.get_type(obj),
+            "id": self.get_id(obj),
+        }
+
     def get_type(self, obj):  # pylint: disable=unused-argument
         return self.feature_types
 

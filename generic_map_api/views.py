@@ -42,7 +42,7 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
 
     @abstractmethod
     def get_meta(self, request):
-        ...
+        pass
 
     def get_parametrized_meta(self, request, params):  # pylint: disable=unused-argument
         return {}
@@ -130,9 +130,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         return config
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument
-        response = {
-            "item": None,  # @TODO
-        }
+        response = {"item": self._render_detailed_item(self.get_item(item_id=pk))}
         return Response(response)
 
     @abstractmethod
@@ -140,11 +138,14 @@ class MapFeaturesBaseView(MapApiBaseView):
         pass
 
     @abstractmethod
-    def get_item(self, id):  # pylint: disable=redefined-builtin
+    def get_item(self, item_id):
         pass
 
     def _render_item(self, item):
         return self.serializer.serialize(item)
+
+    def _render_detailed_item(self, item):
+        return self.serializer.serialize_details(item)
 
     def _sanity_check(self):
         # @TODO check configuration here

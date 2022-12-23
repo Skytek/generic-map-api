@@ -4,7 +4,8 @@ import numpy as np
 from shapely.geometry import MultiPoint, Point
 from sklearn.cluster import DBSCAN
 
-from .serializers import BaseFeatureSerializer, flip_coords
+from .geometry_serializers import flip_coords
+from .serializers import BaseFeatureSerializer
 from .values import ViewPort
 
 

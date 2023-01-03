@@ -2,19 +2,33 @@ import pytest
 from django.contrib.gis.geos import Polygon as GeosPolygon
 from shapely.geometry import Polygon as ShapelyPolygon
 
-from generic_map_api.serializers import PolygonSerializer
+from generic_map_api.serializers import BaseFeatureSerializer
 
 
-class TestPolygonSerializer(PolygonSerializer):
+def geo_json_factory(shell, holes=None):
+    holes = holes or []
+    return {
+        "type": "Polygon",
+        "coordinates": [shell] + holes,
+    }
+
+
+class TestPolygonSerializer(BaseFeatureSerializer):
     feature_type = "test"
 
     def get_geometry(self, obj):
         return obj["geometry"]
 
 
-@pytest.mark.parametrize("geometry_class", (GeosPolygon, ShapelyPolygon))
+@pytest.mark.parametrize(
+    "geometry_class", (GeosPolygon, ShapelyPolygon, geo_json_factory)
+)
 def test_simple_polygon_serializer(geometry_class):
-    obj = {"geometry": geometry_class([(0, 0), (0, 1), (2, 3), (1, 0), (0, 0)])}
+    obj = {
+        "geometry": geometry_class(
+            [(0.0, 0.0), (0.0, 1.0), (2.0, 3.0), (1.0, 0.0), (0.0, 0.0)]
+        )
+    }
 
     expected_output = {
         "type": (
@@ -32,11 +46,16 @@ def test_simple_polygon_serializer(geometry_class):
     assert expected_output == serialized
 
 
+def geos_polygon_factory(shell, holes):
+    return GeosPolygon(shell, *holes)
+
+
 @pytest.mark.parametrize(
     "geometry_factory",
     (
-        lambda shell, holes: GeosPolygon(shell, *holes),
-        lambda shell, holes: ShapelyPolygon(shell, holes=holes),
+        geos_polygon_factory,
+        ShapelyPolygon,
+        geo_json_factory,
     ),
 )
 def test_holed_polygon_serializer(geometry_factory):

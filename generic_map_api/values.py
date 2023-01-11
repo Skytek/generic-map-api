@@ -5,9 +5,10 @@ from shapely.geometry import Point, box
 
 
 class ViewPort:
-    def __init__(self, upper_left, lower_right) -> None:
+    def __init__(self, upper_left, lower_right, zoom) -> None:
         self.upper_left = upper_left
         self.lower_right = lower_right
+        self.zoom = zoom
 
     def to_polygon(self):
         return box(
@@ -27,19 +28,24 @@ class ViewPort:
         if geohashes is None:
             return None
         geohashes_arr = geohashes.split("/")
-        if len(geohashes_arr) >= 2:
+
+        if len(geohashes_arr) >= 3:
             lat1, lon1, lat1_err, lon1_err = geohash2.decode_exactly(geohashes_arr[0])
             lat2, lon2, lat2_err, lon2_err = geohash2.decode_exactly(geohashes_arr[1])
-        else:
+            zoom = int(geohashes_arr[2])
+        elif len(geohashes_arr) == 2:
             lat1, lon1, lat1_err, lon1_err = (
                 lat2,
                 lon2,
                 lat2_err,
                 lon2_err,
             ) = geohash2.decode_exactly(geohashes_arr[0])
+            zoom = int(geohashes_arr[1])
+        else:
+            return None
 
         upper_left, lower_right = Point(lon1 - lon1_err, lat1 + lat1_err), Point(
             lon2 + lon2_err, lat2 - lat2_err
         )
 
-        return cls(upper_left, lower_right)
+        return cls(upper_left, lower_right, zoom)

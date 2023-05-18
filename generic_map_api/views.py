@@ -84,12 +84,16 @@ class MapFeaturesBaseView(MapApiBaseView):
     clustering: bool = False
     clustering_serializer: BaseFeatureSerializer = ClusterSerializer()
 
+    require_viewport_zoom: bool = False
+    require_viewport_size: bool = False
+
     def get_meta(self, request):
         return {
             "type": "Features",
             "name": self.display_name,
             "clustering": self.clustering,
             "query_params": self._render_query_params_meta(request),
+            "requirements": self._render_requirements(request),
             "urls": {
                 "list": self.reverse_action("list"),
                 "detail": self.reverse_action("detail", kwargs={"pk": "ID"}),
@@ -128,6 +132,14 @@ class MapFeaturesBaseView(MapApiBaseView):
                 config[param] = request.GET.get(key)
 
         return config
+
+    def _render_requirements(self, request):  # pylint: disable=unused-argument
+        requirements = []
+        if self.require_viewport_size:
+            requirements.append("viewport.size")
+        if self.require_viewport_zoom:
+            requirements.append("viewport.zoom")
+        return requirements
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument
         response = {"item": self._render_detailed_item(self.get_item(item_id=pk))}

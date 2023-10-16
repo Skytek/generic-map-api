@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import geohash2
-from shapely.geometry import Point, box
+from shapely.geometry import Point, Polygon, box
+from skytek_utils.spatial import tiles
 
 
-class ViewPort:
+class BaseViewPort:
+    def to_polygon(self) -> Polygon:
+        raise NotImplementedError()
+
+
+class ViewPort(BaseViewPort):
     def __init__(self, upper_left, lower_right) -> None:
         self.upper_left = upper_left
         self.lower_right = lower_right
 
-    def to_polygon(self):
+    def to_polygon(self) -> Polygon:
         return box(
             self.upper_left.x,
             self.upper_left.y,
@@ -43,3 +49,39 @@ class ViewPort:
         )
 
         return cls(upper_left, lower_right)
+
+
+class Tile(BaseViewPort):
+    def __init__(self, x: int, y: int, z: int) -> None:
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def to_polygon(self) -> Polygon:
+        upper_left_x, upper_left_y = tiles.tile2deg(
+            self.x,
+            self.y,
+            self.z,
+        )
+        lower_right_x, lower_right_y = tiles.tile2deg(
+            self.x + 1,
+            self.y + 1,
+            self.z,
+        )
+        return box(
+            upper_left_x,
+            upper_left_y,
+            lower_right_x,
+            lower_right_y,
+        )
+
+    @classmethod
+    def from_query_param(cls, param):
+        if param is None:
+            return None
+
+        param_arr = param.split("/")
+        if len(param_arr) != 3:
+            raise ValueError("Tile has to be defined by exactly 3 integers")
+
+        return cls(*[int(v) for v in param_arr])

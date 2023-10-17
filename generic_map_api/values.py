@@ -9,6 +9,9 @@ class BaseViewPort:
     def to_polygon(self) -> Polygon:
         raise NotImplementedError()
 
+    def get_dimensions(self):
+        raise NotImplementedError()
+
 
 class ViewPort(BaseViewPort):
     def __init__(self, upper_left, lower_right) -> None:
@@ -74,6 +77,20 @@ class Tile(BaseViewPort):
             lower_right_x,
             lower_right_y,
         )
+
+    def get_dimensions(self):
+        upper_left_x, upper_left_y = tiles.tile2deg(
+            self.x,
+            self.y,
+            self.z,
+        )
+        lower_right_x, lower_right_y = tiles.tile2deg(
+            self.x + 1,
+            self.y + 1,
+            self.z,
+        )
+
+        return abs(lower_right_x - upper_left_x), abs(lower_right_y - upper_left_y)
 
     @classmethod
     def from_query_param(cls, param):

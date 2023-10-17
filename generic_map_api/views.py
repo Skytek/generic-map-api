@@ -10,7 +10,7 @@ from rest_framework.viewsets import ViewSet
 
 from .clustering import Clustering
 from .serializers import BaseFeatureSerializer, ClusterSerializer
-from .values import ViewPort
+from .values import BaseViewPort, Tile, ViewPort
 
 
 class MapApiBaseMeta(ABCMeta):
@@ -87,11 +87,14 @@ class MapFeaturesBaseView(MapApiBaseView):
     require_viewport_zoom: bool = False
     require_viewport_size: bool = False
 
+    preferred_viewport_handling: str = "viewport"
+
     def get_meta(self, request):
         return {
             "type": "Features",
             "name": self.display_name,
             "clustering": self.clustering,
+            "preferred_viewport_handling": self.preferred_viewport_handling,
             "query_params": self._render_query_params_meta(request),
             "requirements": self._render_requirements(request),
             "urls": {
@@ -101,9 +104,16 @@ class MapFeaturesBaseView(MapApiBaseView):
         }
 
     def list(self, request):
-        viewport = ViewPort.from_geohashes_query_param(
-            request.GET.get("viewport", None)
-        )
+        viewport = None
+
+        if "tile" in request.GET:
+            viewport = Tile.from_query_param(request.GET.get("tile", None))
+
+        elif "viewport" in request.GET:
+            viewport = ViewPort.from_geohashes_query_param(
+                request.GET.get("viewport", None)
+            )
+
         params = self._parse_params(request)
         clustering_config = self._parse_clustering_config(request)
 
@@ -146,7 +156,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         return Response(response)
 
     @abstractmethod
-    def get_items(self, viewport: ViewPort, params: dict):
+    def get_items(self, viewport: BaseViewPort, params: dict):
         pass
 
     @abstractmethod

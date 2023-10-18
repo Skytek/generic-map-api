@@ -62,7 +62,7 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     def get_query_params(self):
         return self.query_params
 
-    def _render_query_params_meta(self, request):
+    def render_query_params_meta(self, request):
         return {
             param.name: param.render_meta(self, request)
             for param in self.get_query_params().values()
@@ -95,8 +95,8 @@ class MapFeaturesBaseView(MapApiBaseView):
             "name": self.display_name,
             "clustering": self.clustering,
             "preferred_viewport_handling": self.preferred_viewport_handling,
-            "query_params": self._render_query_params_meta(request),
-            "requirements": self._render_requirements(request),
+            "query_params": self.render_query_params_meta(request),
+            "requirements": self.render_requirements(request),
             "urls": {
                 "list": self.reverse_action("list"),
                 "detail": self.reverse_action("detail", kwargs={"pk": "ID"}),
@@ -121,10 +121,10 @@ class MapFeaturesBaseView(MapApiBaseView):
 
         if clustering_config:
             serialized_items = Clustering(self.clustering_serializer).find_clusters(
-                clustering_config, (self._render_item(item) for item in items)
+                clustering_config, (self.render_item(item) for item in items)
             )
         else:
-            serialized_items = (self._render_item(item) for item in items)
+            serialized_items = (self.render_item(item) for item in items)
 
         response = {
             "items": list(serialized_items),
@@ -143,7 +143,7 @@ class MapFeaturesBaseView(MapApiBaseView):
 
         return config
 
-    def _render_requirements(self, request):  # pylint: disable=unused-argument
+    def render_requirements(self, request):  # pylint: disable=unused-argument
         requirements = []
         if self.require_viewport_size:
             requirements.append("viewport.size")
@@ -152,7 +152,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         return requirements
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument
-        response = {"item": self._render_detailed_item(self.get_item(item_id=pk))}
+        response = {"item": self.render_detailed_item(self.get_item(item_id=pk))}
         return Response(response)
 
     @abstractmethod
@@ -163,15 +163,14 @@ class MapFeaturesBaseView(MapApiBaseView):
     def get_item(self, item_id):
         pass
 
-    def _render_item(self, item):
-        return self.serializer.serialize(item)
+    def get_serializer(self, item):  # pylint: disable=unused-argument
+        return self.serializer
 
-    def _render_detailed_item(self, item):
-        return self.serializer.serialize_details(item)
+    def render_item(self, item):
+        return self.get_serializer(item).serialize(item)
 
-    def _sanity_check(self):
-        # @TODO check configuration here
-        ...
+    def render_detailed_item(self, item):
+        return self.get_serializer(item).serialize_details(item)
 
 
 class MapTilesBaseView(MapApiBaseView):
@@ -179,7 +178,7 @@ class MapTilesBaseView(MapApiBaseView):
         return {
             "type": "Tiles",
             "name": self.display_name,
-            "query_params": self._render_query_params_meta(request),
+            "query_params": self.render_query_params_meta(request),
             "urls": {
                 "tile": self.make_pattern_url(
                     "tile",

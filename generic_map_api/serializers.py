@@ -1,6 +1,6 @@
 from typing import Tuple, Union
 
-from . import geometry_serializers
+from . import date_line_normalization, geometry_serializers
 
 
 class FeatureSerializerMeta(type):
@@ -51,8 +51,9 @@ class BaseFeatureSerializer(metaclass=FeatureSerializerMeta):
         return None
 
     def get_frontend_style_geometry(self, obj):
-        geometry = self.get_geometry(obj)  # pylint: disable=assignment-from-none
-        return self.make_frontend_style_geometry(geometry)
+        input_geometry = self.get_geometry(obj)  # pylint: disable=assignment-from-none
+        geometry = self.make_frontend_style_geometry(input_geometry)
+        return date_line_normalization.normalize_geometry(geometry)
 
     def get_boundary_box(
         self, obj

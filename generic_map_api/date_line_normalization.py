@@ -1,6 +1,8 @@
 from itertools import pairwise
 from typing import Generator, Iterable, Tuple
 
+from shapely.geometry import Polygon, box
+
 
 def normalize_line(
     line: Iterable[Tuple[float, float]]
@@ -47,3 +49,12 @@ def normalize_geometry(geometry):
 
     # higher dimension object (polygon, multipolygon, etc.)
     return tuple(normalize_geometry(subgeom) for subgeom in geometry)
+
+
+def normalized_viewport(
+    upper_left_x: float,
+    upper_left_y: float,
+    lower_right_x: float,
+    lower_right_y: float,
+) -> Polygon:
+    return box(upper_left_x, upper_left_y, lower_right_x, lower_right_y)

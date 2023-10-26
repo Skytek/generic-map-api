@@ -34,14 +34,17 @@ class BaseFeatureSerializer(metaclass=FeatureSerializerMeta):
 
     def serialize_details(self, obj):
         return {
-            "type": self.get_type(obj),
+            "type": self.get_type(obj, with_geometry=False),
             "id": self.get_id(obj),
         }
 
-    def get_type(self, obj):  # pylint: disable=unused-argument
-        geometry_feature_type = self.get_geometry_feature_type(self.get_geometry(obj))
-        if geometry_feature_type:
-            return self.feature_types + (geometry_feature_type,)
+    def get_type(self, obj, with_geometry=True):  # pylint: disable=unused-argument
+        if with_geometry:
+            geometry_feature_type = self.get_geometry_feature_type(
+                self.get_geometry(obj)
+            )
+            if geometry_feature_type:
+                return self.feature_types + (geometry_feature_type,)
         return self.feature_types
 
     def get_id(self, obj):  # pylint: disable=unused-argument

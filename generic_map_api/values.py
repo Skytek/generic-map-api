@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import geohash2
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import Point, Polygon
 from skytek_utils.spatial import tiles
+
+from .date_line_normalization import normalized_viewport
 
 
 class BaseViewPort:
@@ -19,7 +21,7 @@ class ViewPort(BaseViewPort):
         self.lower_right = lower_right
 
     def to_polygon(self) -> Polygon:
-        return box(
+        return normalized_viewport(
             self.upper_left.x,
             self.upper_left.y,
             self.lower_right.x,
@@ -71,7 +73,7 @@ class Tile(BaseViewPort):
             self.y + 1,
             self.z,
         )
-        return box(
+        return normalized_viewport(
             upper_left_x,
             upper_left_y,
             lower_right_x,

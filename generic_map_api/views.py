@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
+from base64 import b64encode
 from os import path
+from typing import Tuple
 
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
@@ -23,6 +25,9 @@ class MapApiBaseMeta(ABCMeta):
 
 class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     display_name: str = None
+    category: Tuple[str] = []
+    icon = path.join(path.dirname(__file__), "resources", "icons", "default.png")
+
     query_params = {}
     has_parametrized_meta = False
 
@@ -68,6 +73,14 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
             for param in self.get_query_params().values()
         }
 
+    def get_icon(self) -> str:
+        file_path = self.icon
+        extension = file_path.split(".")[-1]
+        with open(file_path, "rb") as f:
+            data = b64encode(f.read()).decode("utf-8")
+
+        return f"data:image/{extension};base64,{data}"
+
     def _parse_params(self, request):
         return {
             param: value
@@ -80,6 +93,9 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
 
 
 class MapFeaturesBaseView(MapApiBaseView):
+    icon = path.join(
+        path.dirname(__file__), "resources", "icons", "default-features.png"
+    )
     serializer: BaseFeatureSerializer = None
     clustering: bool = False
     clustering_serializer: BaseFeatureSerializer = ClusterSerializer()
@@ -93,6 +109,8 @@ class MapFeaturesBaseView(MapApiBaseView):
         return {
             "type": "Features",
             "name": self.display_name,
+            "category": self.category,
+            "icon": self.get_icon(),
             "clustering": self.clustering,
             "preferred_viewport_handling": self.preferred_viewport_handling,
             "query_params": self.render_query_params_meta(request),
@@ -152,7 +170,11 @@ class MapFeaturesBaseView(MapApiBaseView):
         return requirements
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument
-        response = {"item": self.render_detailed_item(self.get_item(item_id=pk))}
+        item = self.get_item(item_id=pk)
+        if not item:
+            raise Http404()
+
+        response = {"item": self.render_detailed_item(item)}
         return Response(response)
 
     @abstractmethod
@@ -174,10 +196,14 @@ class MapFeaturesBaseView(MapApiBaseView):
 
 
 class MapTilesBaseView(MapApiBaseView):
+    icon = path.join(path.dirname(__file__), "resources", "icons", "default-tiles.png")
+
     def get_meta(self, request):
         return {
             "type": "Tiles",
             "name": self.display_name,
+            "category": self.category,
+            "icon": self.get_icon(),
             "query_params": self.render_query_params_meta(request),
             "urls": {
                 "tile": self.make_pattern_url(

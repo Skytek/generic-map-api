@@ -35,7 +35,7 @@ class Base:
         if self.many:
             return [
                 self.unserialize(value) for value in request.GET.getlist(self.name, [])
-            ]
+            ] or None
         return self.unserialize(request.GET.get(self.name, None))
 
     def unserialize(self, value):

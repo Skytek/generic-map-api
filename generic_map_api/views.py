@@ -84,12 +84,13 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     def _parse_params(self, request):
         return {
             param: value
-            for param, value in {
-                param.name: param.parse_request(request)
-                for param in self.query_params.values()
-            }.items()
+            for param, value in self._parse_params_inner(request)
             if value is not None
         }
+
+    def _parse_params_inner(self, request):
+        for param in self.query_params.values():
+            yield param.name, param.parse_request(request)
 
 
 class MapFeaturesBaseView(MapApiBaseView):

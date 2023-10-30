@@ -46,6 +46,10 @@ class Text(Base):
     type = "text"
 
 
+class Color(Base):
+    type = "color"
+
+
 class DateRange(Base):
     type = "date_range"
 

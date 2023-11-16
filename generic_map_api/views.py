@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, ABCMeta, abstractmethod
 from base64 import b64encode
 from os import path
-from typing import Tuple
+from typing import Optional, Tuple
 
 from django.http import Http404, HttpResponse
 from rest_framework.decorators import action
@@ -25,6 +25,7 @@ class MapApiBaseMeta(ABCMeta):
 
 class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     display_name: str = None
+    api_id: Optional[str] = None
     category: Tuple[str] = []
     icon = path.join(path.dirname(__file__), "resources", "icons", "default.png")
 
@@ -109,6 +110,7 @@ class MapFeaturesBaseView(MapApiBaseView):
     def get_meta(self, request):
         return {
             "type": "Features",
+            "id": self.api_id,
             "name": self.display_name,
             "category": self.category,
             "icon": self.get_icon(),
@@ -202,6 +204,7 @@ class MapTilesBaseView(MapApiBaseView):
     def get_meta(self, request):
         return {
             "type": "Tiles",
+            "id": self.api_id,
             "name": self.display_name,
             "category": self.category,
             "icon": self.get_icon(),

@@ -19,13 +19,16 @@ def normalize_line(
             yield prev_point[0], prev_point[1]
             first_point_yielded = True
 
-        if prev_point[1] > 0 > point[1]:
-            # crossing E -> W
-            world_number += 1
+        if abs(prev_point[1] - point[1]) > 180:
+            # only -180/180 crossing
 
-        if prev_point[1] < 0 < point[1]:
-            # crossing W -> E
-            world_number -= 1
+            if prev_point[1] > 0 > point[1]:
+                # crossing E -> W
+                world_number += 1
+
+            if prev_point[1] < 0 < point[1]:
+                # crossing W -> E
+                world_number -= 1
 
         yield point[0], point[1] + (world_number * 360)
 

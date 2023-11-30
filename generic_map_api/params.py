@@ -58,7 +58,7 @@ class DateRange(Base):
             return None
         dates = value.split(" ")
         from_date = parse_date(dates[0])
-        to_date = parse_date(dates[0])
+        to_date = parse_date(dates[1])
         to_date = to_date.replace(hour=23, minute=59, second=59, microsecond=999999)
         return from_date, to_date
 

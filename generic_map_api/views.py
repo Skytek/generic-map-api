@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
 from .clustering import Clustering
+from .constants import ViewportHandling
 from .serializers import BaseFeatureSerializer, ClusterSerializer
 from .values import BaseViewPort, Tile, ViewPort
 
@@ -104,8 +105,10 @@ class MapFeaturesBaseView(MapApiBaseView):
 
     require_viewport_zoom: bool = False
     require_viewport_size: bool = False
+    require_viewport_meters_per_pixel: bool = False
 
-    preferred_viewport_handling: str = "viewport"
+    preferred_viewport_handling: str = ViewportHandling.SPLIT
+    preferred_viewport_chunks: int = 10
 
     def get_meta(self, request):
         return {
@@ -116,6 +119,7 @@ class MapFeaturesBaseView(MapApiBaseView):
             "icon": self.get_icon(),
             "clustering": self.clustering,
             "preferred_viewport_handling": self.preferred_viewport_handling,
+            "preferred_viewport_chunks": self.preferred_viewport_chunks,
             "query_params": self.render_query_params_meta(request),
             "requirements": self.render_requirements(request),
             "urls": {
@@ -134,6 +138,15 @@ class MapFeaturesBaseView(MapApiBaseView):
             viewport = ViewPort.from_geohashes_query_param(
                 request.GET.get("viewport", None)
             )
+
+        if "viewport.zoom" in request.GET:
+            viewport.zoom = request.GET["viewport.zoom"]
+
+        if "viewport.mpp" in request.GET:
+            viewport.meters_per_pixel = request.GET["viewport.mpp"]
+
+        if "viewport.size" in request.GET:
+            viewport.size = tuple(request.GET["viewport.size"].split("x"))
 
         params = self._parse_params(request)
         clustering_config = self._parse_clustering_config(request)
@@ -170,6 +183,8 @@ class MapFeaturesBaseView(MapApiBaseView):
             requirements.append("viewport.size")
         if self.require_viewport_zoom:
             requirements.append("viewport.zoom")
+        if self.require_viewport_meters_per_pixel:
+            requirements.append("viewport.mpp")
         return requirements
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument

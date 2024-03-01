@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import geohash2
 from shapely.geometry import Point, Polygon
 from skytek_utils.spatial import tiles
@@ -8,6 +10,11 @@ from .date_line_normalization import normalized_viewport
 
 
 class BaseViewPort:
+    def __init__(self) -> None:
+        self.size = None
+        self.meters_per_pixel = None
+        self.zoom = None
+
     def to_polygon(self) -> Polygon:
         raise NotImplementedError()
 
@@ -17,6 +24,7 @@ class BaseViewPort:
 
 class ViewPort(BaseViewPort):
     def __init__(self, upper_left, lower_right) -> None:
+        super().__init__()
         self.upper_left = upper_left
         self.lower_right = lower_right
 
@@ -37,7 +45,8 @@ class ViewPort(BaseViewPort):
     def from_geohashes_query_param(cls, geohashes):
         if geohashes is None:
             return None
-        geohashes_arr = geohashes.split("/")
+        split_by = r"[\/,\- ]"
+        geohashes_arr = re.split(split_by, geohashes)
         if len(geohashes_arr) >= 2:
             lat1, lon1, lat1_err, lon1_err = geohash2.decode_exactly(geohashes_arr[0])
             lat2, lon2, lat2_err, lon2_err = geohash2.decode_exactly(geohashes_arr[1])
@@ -58,6 +67,7 @@ class ViewPort(BaseViewPort):
 
 class Tile(BaseViewPort):
     def __init__(self, x: int, y: int, z: int) -> None:
+        super().__init__()
         self.x = x
         self.y = y
         self.z = z
@@ -99,7 +109,9 @@ class Tile(BaseViewPort):
         if param is None:
             return None
 
-        param_arr = param.split("/")
+        split_by = r"[\/,\- ]"
+        param_arr = re.split(split_by, param)
+
         if len(param_arr) != 3:
             raise ValueError("Tile has to be defined by exactly 3 integers")
 

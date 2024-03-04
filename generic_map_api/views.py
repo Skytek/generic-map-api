@@ -118,7 +118,9 @@ class MapFeaturesBaseView(MapApiBaseView):
             "category": self.category,
             "icon": self.get_icon(),
             "clustering": self.clustering,
-            "preferred_viewport_handling": self.preferred_viewport_handling,
+            "preferred_viewport_handling": self.preferred_viewport_handling.value
+            if isinstance(self.preferred_viewport_handling, ViewportHandling)
+            else self.preferred_viewport_handling,
             "preferred_viewport_chunks": self.preferred_viewport_chunks,
             "query_params": self.render_query_params_meta(request),
             "requirements": self.render_requirements(request),

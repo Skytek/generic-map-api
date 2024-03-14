@@ -151,7 +151,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         if "viewport.size" in request.GET:
             viewport.size = tuple(request.GET["viewport.size"].split("x"))
 
-        viewport.clustering = True or to_bool(request.GET.get("clustering", False))
+        viewport.clustering = to_bool(request.GET.get("clustering", False))
 
         params = self._parse_params(request)
 
@@ -212,9 +212,6 @@ class MapFeaturesBaseView(MapApiBaseView):
 
     def get_clustering_algorithm(self) -> BaseClustering:
         return self.clustering_class()
-
-    def get_clustering_config(self) -> dict:
-        return {}
 
 
 class MapTilesBaseView(MapApiBaseView):

@@ -1,56 +1,98 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from shapely.geometry import MultiPoint, Point
+from django.db.models import QuerySet
+from shapely.geometry import MultiPoint, MultiPolygon, Point
 from sklearn.cluster import DBSCAN
 
-from .geometry_serializers import flip_coords
-from .serializers import BaseFeatureSerializer
-from .values import ViewPort
+if TYPE_CHECKING:
+    from .values import BaseViewPort
+    from .views import MapFeaturesBaseView
 
 
 @dataclass
-class Cluster:
-    centroid: Point
-    points: MultiPoint
-    items: list
+class ClusteringOutput:
+    is_cluster: bool
+    item: Any
 
 
-class Clustering:
-    def __init__(self, serializer: BaseFeatureSerializer) -> None:
-        self.serializer = serializer
+class BaseClustering:
+    def __init__(self) -> None:
+        self.view = None
 
-    def item_to_point(self, item: dict):
-        if "point" in item["type"]:
-            return flip_coords(item["geom"])
-        return None
+    def find_clusters(self, view: MapFeaturesBaseView, viewport: BaseViewPort, items):
+        raise NotImplementedError()
 
-    def find_clusters(self, config, serialized_items):
+
+class DatabaseClustering(BaseClustering):
+    def find_clusters(self, view: MapFeaturesBaseView, viewport: BaseViewPort, items):
+        if not isinstance(items, QuerySet):
+            raise ValueError("Database clustering requires QuerySet on input")
+
+        raise NotImplementedError()
+
+
+class BasicClustering:
+    @dataclass
+    class Cluster:
+        centroid: Point
+        shape: MultiPolygon
+        items: list
+
+    def find_clusters(  # pylint: disable=too-many-locals
+        self,
+        view: MapFeaturesBaseView,
+        viewport: BaseViewPort,
+        items,
+    ):
+        config = view.get_clustering_config()
+
+        include_orphans = config.get("include_orphans", False)
+
+        def default_item_to_point(item):
+            try:
+                geom = view.serializer.get_geometry(item)
+                return geom.centroid
+            except (ValueError, AttributeError):
+                return None
+
+        item_to_point = config.get("item_to_point", default_item_to_point)
+
         items_to_cluster = []
         points_to_cluster = []
-
-        for item in serialized_items:
-            point = self.item_to_point(item)
+        for item in items:
+            point = item_to_point(item)
 
             if point:
                 items_to_cluster.append(item)
                 points_to_cluster.append(point)
             else:
-                yield item
+                if include_orphans:
+                    yield ClusteringOutput(
+                        is_cluster=False,
+                        item=item,
+                    )
 
         if not points_to_cluster:
             return
 
         dataset = np.array(points_to_cluster)
 
-        clustering = DBSCAN(**self.get_clustering_params(config)).fit(dataset)
+        clustering = DBSCAN(**self.get_clustering_params(config, viewport)).fit(dataset)
 
         labels = clustering.labels_
 
         clusters = {}
         for label, item, point in zip(labels, items_to_cluster, points_to_cluster):
             if label < 0:
-                yield item
+                if include_orphans:
+                    yield ClusteringOutput(
+                        is_cluster=False,
+                        item=item,
+                    )
             else:
                 if label not in clusters:
                     clusters[label] = {"points": [], "items": []}
@@ -59,25 +101,32 @@ class Clustering:
 
         for cluster in clusters.values():
             multipoint = MultiPoint(cluster["points"])
-            cluster = Cluster(
-                centroid=multipoint.centroid, points=multipoint, items=cluster["items"]
+            multipolygon = MultiPolygon([multipoint.convex_hull])
+            cluster_obj = self.Cluster(
+                centroid=multipolygon.centroid,
+                shape=multipolygon,
+                items=cluster["items"],
             )
-            yield self.serializer.serialize(cluster)
+            yield ClusteringOutput(
+                is_cluster=True,
+                item=cluster_obj,
+            )
 
-    def get_clustering_params(self, in_config):
+    def get_clustering_params(self, in_config, viewport):
         config = {
             "eps": 0.01,
             "eps_factor": 0.01,
             "max_eps": 1.3,
+            "p": 2,
+            "min_samples": 5,
         }
 
-        algorithm_params = ("eps",)
+        algorithm_params = ("eps", "p", "min_samples")
 
         if "eps_factor" in in_config:
             config["eps_factor"] = float(in_config["eps_factor"])
 
-        if "viewport" in in_config:
-            viewport = ViewPort.from_geohashes_query_param(in_config["viewport"])
+        if viewport:
             eps = config["eps_factor"] * sum(viewport.get_dimensions()) / 2
             config["eps"] = eps
         elif "eps" in in_config:

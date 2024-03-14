@@ -14,6 +14,7 @@ class BaseViewPort:
         self.size = None
         self.meters_per_pixel = None
         self.zoom = None
+        self.clustering = False
 
     def to_polygon(self) -> Polygon:
         raise NotImplementedError()

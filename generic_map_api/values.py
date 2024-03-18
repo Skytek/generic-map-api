@@ -25,6 +25,17 @@ class BaseViewPort:
         raise NotImplementedError()
 
 
+class EmptyViewport(BaseViewPort):
+    def __bool__(self) -> bool:
+        return False
+
+    def to_polygon(self) -> Polygon:
+        return None
+
+    def get_dimensions(self):
+        return None
+
+
 class ViewPort(BaseViewPort):
     def __init__(self, upper_left, lower_right) -> None:
         super().__init__()

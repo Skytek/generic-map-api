@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Tuple
 import numpy as np
 from django.db import connections
 from django.db.models import QuerySet
-from shapely import get_srid, wkb
+from shapely import wkb
 from shapely.geometry import LineString, MultiPoint, MultiPolygon, Point
 from sklearn.cluster import DBSCAN
 
@@ -81,7 +81,7 @@ class DatabaseClustering(BaseClustering):
         viewport_wkb = None
         if viewport:
             viewport_polygon = viewport.to_polygon()
-            viewport_wkb = wkb.dumps(viewport_polygon, srid=get_srid(viewport_polygon))
+            viewport_wkb = wkb.dumps(viewport_polygon, include_srid=True)
 
         sql, sql_params = items.query.sql_with_params()
         (

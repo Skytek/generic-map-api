@@ -3,9 +3,11 @@ from __future__ import annotations
 import re
 
 import geohash2
+from shapely import set_srid
 from shapely.geometry import Point, Polygon
 from skytek_utils.spatial import tiles
 
+from .constants import WGS84
 from .date_line_normalization import normalized_viewport
 
 
@@ -30,11 +32,14 @@ class ViewPort(BaseViewPort):
         self.lower_right = lower_right
 
     def to_polygon(self) -> Polygon:
-        return normalized_viewport(
-            self.upper_left.x,
-            self.upper_left.y,
-            self.lower_right.x,
-            self.lower_right.y,
+        return set_srid(
+            normalized_viewport(
+                self.upper_left.x,
+                self.upper_left.y,
+                self.lower_right.x,
+                self.lower_right.y,
+            ),
+            WGS84,
         )
 
     def get_dimensions(self):
@@ -84,11 +89,14 @@ class Tile(BaseViewPort):
             self.y + 1,
             self.z,
         )
-        return normalized_viewport(
-            upper_left_x,
-            upper_left_y,
-            lower_right_x,
-            lower_right_y,
+        return set_srid(
+            normalized_viewport(
+                upper_left_x,
+                upper_left_y,
+                lower_right_x,
+                lower_right_y,
+            ),
+            WGS84,
         )
 
     def get_dimensions(self):

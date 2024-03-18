@@ -3,16 +3,17 @@ from __future__ import annotations
 from abc import ABC, ABCMeta, abstractmethod
 from base64 import b64encode
 from os import path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Type
 
 from django.http import Http404, HttpResponse
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from .clustering import Clustering
+from .clustering import BaseClustering, BasicClustering, ClusteringOutput
 from .constants import ViewportHandling
-from .serializers import BaseFeatureSerializer, ClusterSerializer
+from .serializers import BaseFeatureSerializer
+from .utils import to_bool
 from .values import BaseViewPort, Tile, ViewPort
 
 
@@ -101,7 +102,7 @@ class MapFeaturesBaseView(MapApiBaseView):
     )
     serializer: BaseFeatureSerializer = None
     clustering: bool = False
-    clustering_serializer: BaseFeatureSerializer = ClusterSerializer()
+    clustering_class: Type[BaseClustering] = BasicClustering
 
     require_viewport_zoom: bool = False
     require_viewport_size: bool = False
@@ -150,34 +151,24 @@ class MapFeaturesBaseView(MapApiBaseView):
         if "viewport.size" in request.GET:
             viewport.size = tuple(request.GET["viewport.size"].split("x"))
 
+        viewport.clustering = to_bool(request.GET.get("clustering", False))
+
         params = self._parse_params(request)
-        clustering_config = self._parse_clustering_config(request)
 
         items = self.get_items(viewport, params)
 
-        if clustering_config:
-            serialized_items = Clustering(self.clustering_serializer).find_clusters(
-                clustering_config, (self.render_item(item) for item in items)
+        if self.clustering and viewport.clustering:
+            clusters = self.get_clustering_algorithm().find_clusters(
+                self, viewport, items
             )
+            serialized_items = (self.render_cluster_item(item) for item in clusters)
         else:
             serialized_items = (self.render_item(item) for item in items)
 
         response = {
             "items": list(serialized_items),
-            "legend": None,  # @TODO build legend
         }
         return Response(response)
-
-    def _parse_clustering_config(self, request):
-        config = {}
-        params = ("", "viewport", "eps")
-
-        for param in params:
-            key = f"clustering.{param}" if param else "clustering"
-            if key in request.GET:
-                config[param] = request.GET.get(key)
-
-        return config
 
     def render_requirements(self, request):  # pylint: disable=unused-argument
         requirements = []
@@ -211,8 +202,16 @@ class MapFeaturesBaseView(MapApiBaseView):
     def render_item(self, item):
         return self.get_serializer(item).serialize(item)
 
+    def render_cluster_item(self, item: ClusteringOutput):
+        if item.is_cluster:
+            return self.get_serializer(item.item).serialize_cluster(item.item)
+        return self.get_serializer(item.item).serialize(item.item)
+
     def render_detailed_item(self, item):
         return self.get_serializer(item).serialize_details(item)
+
+    def get_clustering_algorithm(self) -> BaseClustering:
+        return self.clustering_class()
 
 
 class MapTilesBaseView(MapApiBaseView):

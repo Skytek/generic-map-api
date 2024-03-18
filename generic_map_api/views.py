@@ -14,7 +14,7 @@ from .clustering import BaseClustering, BasicClustering, ClusteringOutput
 from .constants import ViewportHandling
 from .serializers import BaseFeatureSerializer
 from .utils import to_bool
-from .values import BaseViewPort, Tile, ViewPort
+from .values import BaseViewPort, EmptyViewport, Tile, ViewPort
 
 
 class MapApiBaseMeta(ABCMeta):
@@ -132,7 +132,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         }
 
     def list(self, request):
-        viewport = None
+        viewport = EmptyViewport()
 
         if "tile" in request.GET:
             viewport = Tile.from_query_param(request.GET.get("tile", None))

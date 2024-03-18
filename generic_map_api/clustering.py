@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Tuple
 import numpy as np
 from django.db import connections
 from django.db.models import QuerySet
-from shapely import wkb
+from shapely import get_srid, wkb
 from shapely.geometry import LineString, MultiPoint, MultiPolygon, Point
 from sklearn.cluster import DBSCAN
 
@@ -66,6 +66,9 @@ class DatabaseClustering(BaseClustering):
         viewport: BaseViewPort,
         items,
     ):
+        if isinstance(items, (tuple, list)) and not items:
+            return
+
         if not isinstance(items, QuerySet):
             raise ValueError("Database clustering requires QuerySet on input")
 
@@ -74,6 +77,11 @@ class DatabaseClustering(BaseClustering):
         include_orphans = config["include_orphans"]
         geometry_field = config["geometry_field"]
         min_cluster_size = config["min_cluster_size"]
+
+        viewport_wkb = None
+        if viewport:
+            viewport_polygon = viewport.to_polygon()
+            viewport_wkb = wkb.dumps(viewport_polygon, srid=get_srid(viewport_polygon))
 
         sql, sql_params = items.query.sql_with_params()
         (
@@ -86,18 +94,26 @@ class DatabaseClustering(BaseClustering):
                 WITH clustered_items AS (
                     SELECT *, {clustering_sql} OVER () as cluster_label FROM ({sql}) AS orm_sq
                 )
-                SELECT *
-                FROM clustered_items
-                WHERE cluster_label NOT IN (
-                    SELECT cluster_label
+                SELECT * FROM (
+                    SELECT *
                     FROM clustered_items
-                    WHERE cluster_label IS NOT NULL
-                    GROUP BY cluster_label
-                    HAVING COUNT(*) >= %s
-                );
+                    WHERE cluster_label NOT IN (
+                        SELECT cluster_label
+                        FROM clustered_items
+                        WHERE cluster_label IS NOT NULL
+                        GROUP BY cluster_label
+                        HAVING COUNT(*) >= %s
+                )) AS sq
+                WHERE (%s IS NULL OR ST_Intersects({geometry_field}::geography, %s));
             """
             items_outside_clusters_raw_sql_params = (
-                clustering_sql_params + sql_params + (min_cluster_size,)
+                clustering_sql_params
+                + sql_params
+                + (
+                    min_cluster_size,
+                    viewport_wkb,
+                    viewport_wkb,
+                )
             )
             items_outside_clusters = items.model.objects.raw(
                 items_outside_clusters_raw_sql,
@@ -120,10 +136,18 @@ class DatabaseClustering(BaseClustering):
             FROM clustered_items
             WHERE cluster_label IS NOT NULL
             GROUP BY cluster_label
-            HAVING COUNT(*) >= %s;
+            HAVING COUNT(*) >= %s
+                AND (%s IS NULL OR ST_Intersects(ST_Collect({geometry_field}), %s));
         """
+
         clusters_raw_sql_params = (
-            clustering_sql_params + sql_params + (min_cluster_size,)
+            clustering_sql_params
+            + sql_params
+            + (
+                min_cluster_size,
+                viewport_wkb,
+                viewport_wkb,
+            )
         )
 
         connection = connections[items.db]

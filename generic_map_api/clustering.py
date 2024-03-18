@@ -66,6 +66,9 @@ class DatabaseClustering(BaseClustering):
         viewport: BaseViewPort,
         items,
     ):
+        if isinstance(items, (tuple, list)) and not items:
+            return
+
         if not isinstance(items, QuerySet):
             raise ValueError("Database clustering requires QuerySet on input")
 

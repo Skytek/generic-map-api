@@ -104,7 +104,7 @@ class DatabaseClustering(BaseClustering):
                         GROUP BY cluster_label
                         HAVING COUNT(*) >= %s
                 )) AS sq
-                WHERE (%s IS NULL OR ST_Intersects({geometry_field}::geography, %s));
+                WHERE (%s IS NULL OR ST_Intersects({geometry_field}::geometry, %s));
             """
             items_outside_clusters_raw_sql_params = (
                 clustering_sql_params

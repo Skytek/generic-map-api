@@ -56,7 +56,7 @@ class DatabaseClustering(BaseClustering):
         geometry_field = config["geometry_field"]
         num_clusters = config["num_clusters"]
         radius = config["radius"]
-        sql = f"ST_ClusterKMeans({geometry_field}, %s, %s)"
+        sql = f"ST_ClusterKMeans({geometry_field}::geometry, %s, %s)"
         params = (num_clusters, radius)
         return sql, params
 
@@ -104,7 +104,7 @@ class DatabaseClustering(BaseClustering):
                         GROUP BY cluster_label
                         HAVING COUNT(*) >= %s
                 )) AS sq
-                WHERE (%s IS NULL OR ST_Intersects({geometry_field}::geometry, %s));
+                WHERE (%s IS NULL OR ST_Intersects({geometry_field}::geometry, %s::geometry));
             """
             items_outside_clusters_raw_sql_params = (
                 clustering_sql_params
@@ -132,12 +132,12 @@ class DatabaseClustering(BaseClustering):
             )
             SELECT
                 COUNT(*) as cluster_item_count,
-                ST_Collect({geometry_field}) as cluster_geometry
+                ST_Collect({geometry_field}::geometry) as cluster_geometry
             FROM clustered_items
             WHERE cluster_label IS NOT NULL
             GROUP BY cluster_label
             HAVING COUNT(*) >= %s
-                AND (%s IS NULL OR ST_Intersects(ST_Collect({geometry_field}), %s));
+                AND (%s IS NULL OR ST_Intersects(ST_Collect({geometry_field}::geometry)::geometry, %s::geometry));
         """
 
         clusters_raw_sql_params = (

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any, Generator, Tuple
 
 import numpy as np
 from django.db import DEFAULT_DB_ALIAS, connections
@@ -10,22 +10,17 @@ from shapely import wkb
 from shapely.geometry import LineString, MultiPoint, MultiPolygon, Point
 from sklearn.cluster import DBSCAN
 
+from .values import ClusteringOutput
+
 if TYPE_CHECKING:
     from .values import BaseViewPort
     from .views import MapFeaturesBaseView
 
 
-@dataclass
-class ClusteringOutput:
-    is_cluster: bool
-    item: Any
-
-
 class BaseClustering:
-    def __init__(self) -> None:
-        self.view = None
-
-    def find_clusters(self, view: MapFeaturesBaseView, viewport: BaseViewPort, items):
+    def find_clusters(
+        self, view: MapFeaturesBaseView, viewport: BaseViewPort, items
+    ) -> Generator[ClusteringOutput, None, None]:
         raise NotImplementedError()
 
 
@@ -66,7 +61,7 @@ class DatabaseClustering(BaseClustering):
         view: MapFeaturesBaseView,
         viewport: BaseViewPort,
         items,
-    ):
+    ) -> Generator[ClusteringOutput, None, None]:
         if isinstance(items, (tuple, list)) and not items:
             return
 
@@ -205,7 +200,7 @@ class BasicClustering:
         view: MapFeaturesBaseView,
         viewport: BaseViewPort,
         items,
-    ):
+    ) -> Generator[ClusteringOutput, None, None]:
         config = self.get_clustering_config(view, viewport)
 
         include_orphans = config["include_orphans"]

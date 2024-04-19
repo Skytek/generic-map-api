@@ -1,5 +1,7 @@
 from typing import Tuple, Union
 
+from rest_framework.serializers import Serializer
+
 from . import date_line_normalization, geometry_serializers
 
 
@@ -149,3 +151,18 @@ PointSerializer = BaseFeatureSerializer
 LineSerializer = BaseFeatureSerializer
 PolygonSerializer = BaseFeatureSerializer
 MultiPolygonSerializer = BaseFeatureSerializer
+
+
+class BoundingBoxSerializer(Serializer):
+    def to_representation(self, instance):
+        return {
+            "northwest": {
+                "latitude": instance.northwest.latitude,
+                "longitude": instance.northwest.longitude,
+            },
+            "southeast": {
+                "latitude": instance.southeast.latitude,
+                "longitude": instance.southeast.longitude,
+            },
+            "count": instance.count,
+        }

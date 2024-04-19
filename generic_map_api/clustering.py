@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Tuple
 
 import numpy as np
-from django.db import connections
+from django.db import DEFAULT_DB_ALIAS, connections
 from django.db.models import QuerySet
 from shapely import wkb
 from shapely.geometry import LineString, MultiPoint, MultiPolygon, Point
@@ -48,6 +48,7 @@ class DatabaseClustering(BaseClustering):
             "min_cluster_size": self.DEFAULT_MIN_CLUSTER_SIZE,
             "num_clusters": self.DEFAULT_NUM_CLUSTERS,
             "radius": self.DEFAULT_RADIUS,
+            "db_alias": None,
         }
 
     def get_clustering_function_sql_with_params(
@@ -77,6 +78,7 @@ class DatabaseClustering(BaseClustering):
         include_orphans = config["include_orphans"]
         geometry_field = config["geometry_field"]
         min_cluster_size = config["min_cluster_size"]
+        db_alias = config["db_alias"] or items.db or DEFAULT_DB_ALIAS
 
         viewport_wkb = None
         if viewport:
@@ -115,7 +117,7 @@ class DatabaseClustering(BaseClustering):
                     viewport_wkb,
                 )
             )
-            items_outside_clusters = items.model.objects.raw(
+            items_outside_clusters = items.model.objects.using(db_alias).raw(
                 items_outside_clusters_raw_sql,
                 items_outside_clusters_raw_sql_params,
             )
@@ -150,7 +152,7 @@ class DatabaseClustering(BaseClustering):
             )
         )
 
-        connection = connections[items.db]
+        connection = connections[db_alias]
         with connection.cursor() as cursor:
             cursor.execute(clusters_raw_sql, clusters_raw_sql_params)
             while row := cursor.fetchone():

@@ -31,14 +31,15 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ matrix.python }}-${{ env.cache-name }}-
 
-    - name: Install gdal-bin
+    - name: Install bin dependencies
       run: |
         sudo apt-get -qq update
-        sudo apt-get -y install gdal-bin
+        sudo apt-get -y install gdal-bin libgdal-dev libsqlite3-mod-spatialite
 
-    - name: Install dependencies
+    - name: Install python dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install gdal==$(gdal-config --version)
         pip install -r requirements/base.txt --user
         pip install -r requirements/tests.txt --user
         pip install -r requirements/lint.txt --user

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from typing import Any
 
 import geohash2
 from shapely import set_srid
@@ -136,3 +138,36 @@ class Tile(BaseViewPort):
             raise ValueError("Tile has to be defined by exactly 3 integers")
 
         return cls(*[int(v) for v in param_arr])
+
+
+@dataclass
+class ClusteringOutput:
+    is_cluster: bool
+    item: Any
+
+
+@dataclass
+class BoundingBox:
+    @dataclass
+    class Point:
+        latitude: float
+        longitude: float
+
+    northwest: Point
+    southeast: Point
+
+    count: int
+
+    @classmethod
+    def full(cls, count=0):
+        return cls(
+            northwest=cls.Point(
+                latitude=90,
+                longitude=-180,
+            ),
+            southeast=cls.Point(
+                latitude=-90,
+                longitude=180,
+            ),
+            count=count,
+        )

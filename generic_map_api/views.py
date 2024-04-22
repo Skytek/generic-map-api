@@ -5,14 +5,16 @@ from base64 import b64encode
 from os import path
 from typing import Optional, Tuple, Type
 
+from django.db.models import QuerySet
 from django.http import Http404, HttpResponse
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
+from .bounding_box import AutomaticBoundingBoxing, BaseBoundingBoxing
 from .clustering import BaseClustering, BasicClustering, ClusteringOutput
 from .constants import ViewportHandling
-from .serializers import BaseFeatureSerializer
+from .serializers import BaseFeatureSerializer, BoundingBoxSerializer
 from .utils import to_bool
 from .values import BaseViewPort, EmptyViewport, Tile, ViewPort
 
@@ -39,8 +41,12 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     @action(detail=False, url_path="_meta")
     def meta(self, request):
         meta = self.get_meta(request)
-        if self.has_parametrized_meta and "urls" in meta:
-            meta["urls"]["parametrized_meta"] = self.reverse_action("parametrized-meta")
+        if not "urls" in meta:
+            meta["urls"] = {}
+        meta["urls"] = {
+            **meta["urls"],
+            **self.get_urls(),
+        }
         return Response(meta)
 
     @action(detail=False, url_path="_meta/parametrized")
@@ -48,12 +54,24 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
         params = self._parse_params(request)
         return Response(self.get_parametrized_meta(request, params))
 
+    @action(detail=False, url_path="bounds")
+    def bounds(self, request):
+        raise NotImplementedError()
+
     @abstractmethod
     def get_meta(self, request):
         pass
 
     def get_parametrized_meta(self, request, params):  # pylint: disable=unused-argument
         return {}
+
+    def get_urls(self):
+        urls = {
+            "meta": self.reverse_action("meta"),
+        }
+        if self.has_parametrized_meta:
+            urls["parametrized_meta"] = self.reverse_action("parametrized-meta")
+        return urls
 
     @action(detail=False, url_path="_meta/query_param/(?P<query_param>[^/.]+)/options")
     def query_param_options(self, request, query_param):
@@ -104,12 +122,35 @@ class MapFeaturesBaseView(MapApiBaseView):
     clustering: bool = False
     clustering_class: Type[BaseClustering] = BasicClustering
 
+    bounding_box_class = AutomaticBoundingBoxing
+    bounding_box_db_geometry_field = None
+
     require_viewport_zoom: bool = False
     require_viewport_size: bool = False
     require_viewport_meters_per_pixel: bool = False
 
     preferred_viewport_handling: str = ViewportHandling.SPLIT
     preferred_viewport_chunks: int = 10
+
+    @action(detail=False, url_path="bounds")
+    def bounds(self, request):
+        viewport = EmptyViewport()
+        params = self._parse_params(request)
+        items = self.get_items(viewport, params)
+        bounds = self.get_bounding_box_algorithm().find_bounding_box(self, items)
+        return Response(BoundingBoxSerializer(bounds).data)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        if self.get_bounding_box_algorithm():
+            urls["bounds"] = self.reverse_action("bounds")
+        urls.update(
+            {
+                "list": self.reverse_action("list"),
+                "detail": self.reverse_action("detail", kwargs={"pk": "ID"}),
+            }
+        )
+        return urls
 
     def get_meta(self, request):
         return {
@@ -125,10 +166,6 @@ class MapFeaturesBaseView(MapApiBaseView):
             "preferred_viewport_chunks": self.preferred_viewport_chunks,
             "query_params": self.render_query_params_meta(request),
             "requirements": self.render_requirements(request),
-            "urls": {
-                "list": self.reverse_action("list"),
-                "detail": self.reverse_action("detail", kwargs={"pk": "ID"}),
-            },
         }
 
     def list(self, request):
@@ -163,6 +200,8 @@ class MapFeaturesBaseView(MapApiBaseView):
             )
             serialized_items = (self.render_cluster_item(item) for item in clusters)
         else:
+            if isinstance(items, QuerySet):
+                items = items.iterator()
             serialized_items = (self.render_item(item) for item in items)
 
         response = {
@@ -213,9 +252,35 @@ class MapFeaturesBaseView(MapApiBaseView):
     def get_clustering_algorithm(self) -> BaseClustering:
         return self.clustering_class()
 
+    def get_bounding_box_algorithm(self) -> BaseBoundingBoxing | None:
+        if not self.bounding_box_class:
+            return None
+        return self.bounding_box_class()
+
 
 class MapTilesBaseView(MapApiBaseView):
     icon = path.join(path.dirname(__file__), "resources", "icons", "default-tiles.png")
+
+    @action(detail=False, url_path="bounds")
+    def bounds(self, request):
+        bounds = ...
+        return Response(BoundingBoxSerializer(bounds).data)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        if hasattr(self, "get_bounds"):
+            urls["bounds"] = self.reverse_action("bounds")
+        urls.update(
+            {
+                "tile": self.make_pattern_url(
+                    "tile",
+                    kwargs={
+                        param: "{" + param + "}" for param in self.get_url_params()
+                    },
+                ),
+            }
+        )
+        return urls
 
     def get_meta(self, request):
         return {
@@ -225,14 +290,6 @@ class MapTilesBaseView(MapApiBaseView):
             "category": self.category,
             "icon": self.get_icon(),
             "query_params": self.render_query_params_meta(request),
-            "urls": {
-                "tile": self.make_pattern_url(
-                    "tile",
-                    kwargs={
-                        param: "{" + param + "}" for param in self.get_url_params()
-                    },
-                ),
-            },
         }
 
     def make_pattern_url(self, action_name, kwargs):

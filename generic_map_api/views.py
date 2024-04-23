@@ -3,20 +3,22 @@ from __future__ import annotations
 from abc import ABC, ABCMeta, abstractmethod
 from base64 import b64encode
 from os import path
-from typing import Optional, Tuple, Type
+from typing import Callable, Optional, Tuple, Type
 
+from django.core.exceptions import BadRequest
 from django.db.models import QuerySet
 from django.http import Http404, HttpResponse
 from rest_framework.decorators import action
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from .bounding_box import AutomaticBoundingBoxing, BaseBoundingBoxing
+from .bounding_box import AutomaticBoundingBoxing
 from .clustering import BaseClustering, BasicClustering, ClusteringOutput
 from .constants import ViewportHandling
 from .serializers import BaseFeatureSerializer, BoundingBoxSerializer
 from .utils import to_bool
-from .values import BaseViewPort, EmptyViewport, Tile, ViewPort
+from .values import BaseViewPort, BoundingBox, EmptyViewport, Tile, ViewPort
 
 
 class MapApiBaseMeta(ABCMeta):
@@ -38,6 +40,8 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
 
     trailing_slash = None
 
+    get_bounds: Callable[[dict, Request], BoundingBox] | None = None
+
     @action(detail=False, url_path="_meta")
     def meta(self, request):
         meta = self.get_meta(request)
@@ -56,7 +60,12 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
 
     @action(detail=False, url_path="bounds")
     def bounds(self, request):
-        raise NotImplementedError()
+        if not callable(self.get_bounds):
+            raise BadRequest()
+
+        params = self._parse_params(request)
+        bounds = self.get_bounds(params, request)  # pylint: disable=not-callable
+        return Response(BoundingBoxSerializer(bounds).data)
 
     @abstractmethod
     def get_meta(self, request):
@@ -69,6 +78,9 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
         urls = {
             "meta": self.reverse_action("meta"),
         }
+        get_bounds_implemented = self.get_bounds is not None
+        if get_bounds_implemented:
+            urls["bounds"] = self.reverse_action("bounds")
         if self.has_parametrized_meta:
             urls["parametrized_meta"] = self.reverse_action("parametrized-meta")
         return urls
@@ -122,7 +134,6 @@ class MapFeaturesBaseView(MapApiBaseView):
     clustering: bool = False
     clustering_class: Type[BaseClustering] = BasicClustering
 
-    bounding_box_class = AutomaticBoundingBoxing
     bounding_box_db_geometry_field = None
 
     require_viewport_zoom: bool = False
@@ -132,18 +143,13 @@ class MapFeaturesBaseView(MapApiBaseView):
     preferred_viewport_handling: str = ViewportHandling.SPLIT
     preferred_viewport_chunks: int = 10
 
-    @action(detail=False, url_path="bounds")
-    def bounds(self, request):
+    def get_bounds(self, params, request):  # pylint: disable=unused-argument
         viewport = EmptyViewport()
-        params = self._parse_params(request)
         items = self.get_items(viewport, params)
-        bounds = self.get_bounding_box_algorithm().find_bounding_box(self, items)
-        return Response(BoundingBoxSerializer(bounds).data)
+        return AutomaticBoundingBoxing().find_bounding_box(self, items)
 
     def get_urls(self):
         urls = super().get_urls()
-        if self.get_bounding_box_algorithm():
-            urls["bounds"] = self.reverse_action("bounds")
         urls.update(
             {
                 "list": self.reverse_action("list"),
@@ -220,7 +226,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         return requirements
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument
-        item = self.get_item(item_id=pk)
+        item = self.get_item(item_id=pk)  # pylint: disable=assignment-from-none
         if not item:
             raise Http404()
 
@@ -231,9 +237,8 @@ class MapFeaturesBaseView(MapApiBaseView):
     def get_items(self, viewport: BaseViewPort, params: dict):
         pass
 
-    @abstractmethod
-    def get_item(self, item_id):
-        pass
+    def get_item(self, item_id):  # pylint: disable=unused-argument
+        return None
 
     def get_serializer(self, item):  # pylint: disable=unused-argument
         return self.serializer
@@ -252,24 +257,12 @@ class MapFeaturesBaseView(MapApiBaseView):
     def get_clustering_algorithm(self) -> BaseClustering:
         return self.clustering_class()
 
-    def get_bounding_box_algorithm(self) -> BaseBoundingBoxing | None:
-        if not self.bounding_box_class:
-            return None
-        return self.bounding_box_class()
-
 
 class MapTilesBaseView(MapApiBaseView):
     icon = path.join(path.dirname(__file__), "resources", "icons", "default-tiles.png")
 
-    @action(detail=False, url_path="bounds")
-    def bounds(self, request):
-        bounds = ...
-        return Response(BoundingBoxSerializer(bounds).data)
-
     def get_urls(self):
         urls = super().get_urls()
-        if hasattr(self, "get_bounds"):
-            urls["bounds"] = self.reverse_action("bounds")
         urls.update(
             {
                 "tile": self.make_pattern_url(

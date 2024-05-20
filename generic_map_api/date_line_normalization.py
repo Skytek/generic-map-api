@@ -1,7 +1,7 @@
 from itertools import pairwise
-from typing import Generator, Iterable, Tuple
+from typing import Generator, Iterable, Tuple, Union
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon, Polygon, box
 
 
 def normalize_line(
@@ -54,10 +54,39 @@ def normalize_geometry(geometry):
     return tuple(normalize_geometry(subgeom) for subgeom in geometry)
 
 
+def _normalize_longitudes(longitudes: Tuple[float, float]) -> Tuple[float, float]:
+    left_x, right_x = longitudes
+
+    while left_x < -180:
+        left_x += 360
+        right_x += 360
+
+    while left_x > 180:
+        left_x -= 360
+        right_x -= 360
+
+    return left_x, right_x
+
+
 def normalized_viewport(
     upper_left_x: float,
     upper_left_y: float,
     lower_right_x: float,
     lower_right_y: float,
-) -> Polygon:
-    return box(upper_left_x, upper_left_y, lower_right_x, lower_right_y)
+) -> Union[Polygon, MultiPolygon]:
+    longitude_span = lower_right_x - upper_left_x
+
+    if longitude_span >= 360:
+        return box(-180, upper_left_y, 180, lower_right_y)
+
+    upper_left_x, lower_right_x = _normalize_longitudes((upper_left_x, lower_right_x))
+
+    if upper_left_x <= lower_right_x:
+        return box(upper_left_x, upper_left_y, lower_right_x, lower_right_y)
+
+    return MultiPolygon(
+        [
+            box(lower_right_x, lower_right_y, -180, upper_left_y),
+            box(180, lower_right_y, upper_left_x, upper_left_y),
+        ]
+    )

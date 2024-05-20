@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Union
 
 import geohash2
 from shapely import set_srid
-from shapely.geometry import Point, Polygon
+from shapely.geometry import MultiPolygon, Point, Polygon
 from skytek_utils.spatial import tiles
 
 from .constants import WGS84
@@ -44,7 +44,7 @@ class ViewPort(BaseViewPort):
         self.upper_left = upper_left
         self.lower_right = lower_right
 
-    def to_polygon(self) -> Polygon:
+    def to_polygon(self) -> Union[Polygon | MultiPolygon]:
         return set_srid(
             normalized_viewport(
                 self.upper_left.x,
@@ -91,7 +91,7 @@ class Tile(BaseViewPort):
         self.y = y
         self.z = z
 
-    def to_polygon(self) -> Polygon:
+    def to_polygon(self) -> Union[Polygon, MultiPolygon]:
         upper_left_x, upper_left_y = tiles.tile2deg(
             self.x,
             self.y,

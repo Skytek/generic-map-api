@@ -25,6 +25,7 @@ class FeatureSerializer(BaseFeatureSerializer):
 class FeatureView(MapFeaturesBaseView):
 
     serializer = FeatureSerializer()
+    cache_ttl = 15
 
     query_params = {"category": Text("Category", many=False)}
 

@@ -26,6 +26,14 @@ class BaseViewPort:
     def get_dimensions(self):
         raise NotImplementedError()
 
+    def to_dict(self) -> dict:
+        return {
+            "size": self.size,
+            "mpp": self.meters_per_pixel,
+            "zoom": self.zoom,
+            "clustering": self.clustering,
+        }
+
 
 class EmptyViewport(BaseViewPort):
     def __bool__(self) -> bool:
@@ -36,6 +44,9 @@ class EmptyViewport(BaseViewPort):
 
     def get_dimensions(self):
         return None
+
+    def to_dict(self) -> dict:
+        return {"type": "empty"}
 
 
 class ViewPort(BaseViewPort):
@@ -82,6 +93,19 @@ class ViewPort(BaseViewPort):
         )
 
         return cls(upper_left, lower_right)
+
+    def to_dict(self) -> dict:
+        output = super().to_dict()
+        output.update(
+            {
+                "type": "geohash",
+                "corners": (
+                    (self.upper_left.x, self.upper_left.y),
+                    (self.lower_right.x, self.lower_right.y),
+                ),
+            }
+        )
+        return output
 
 
 class Tile(BaseViewPort):
@@ -138,6 +162,16 @@ class Tile(BaseViewPort):
             raise ValueError("Tile has to be defined by exactly 3 integers")
 
         return cls(*[int(v) for v in param_arr])
+
+    def to_dict(self) -> dict:
+        output = super().to_dict()
+        output.update(
+            {
+                "type": "xyz",
+                "coords": (self.x, self.y, self.z),
+            }
+        )
+        return output
 
 
 @dataclass

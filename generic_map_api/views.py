@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
 from .bounding_box import AutomaticBoundingBoxing
+from .caching import DEFAULT_TTL, Cache
 from .clustering import BaseClustering, BasicClustering, ClusteringOutput
 from .constants import ViewportHandling
 from .serializers import BaseFeatureSerializer, BoundingBoxSerializer
@@ -42,10 +43,31 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
 
     get_bounds: Callable[[dict, Request], BoundingBox] | None = None
 
+    cache_name = None
+    cache_view_name = None
+    cache_ttl = DEFAULT_TTL
+
+    cache_ttl_meta = None
+    cache_ttl_item = None
+    cache_ttl_items = None
+    cache_ttl_bounds = None
+    cache_ttl_tile = None
+
+    def get_caching_key_extra(
+        self, fn_name, request, **context
+    ):  # pylint: disable=unused-argument
+        if fn_name == "ITEMS" and hasattr(request, "session"):
+            return {
+                "session_key": request.session.session_key,
+            }
+        return None
+
     @action(detail=False, url_path="_meta")
-    def meta(self, request):
-        meta = self.get_meta(request)
-        if not "urls" in meta:
+    def meta(self, request):  # pylint: disable=unused-argument
+        cache = Cache(self, request)
+        meta = cache.get_serialized_meta()
+
+        if "urls" not in meta:
             meta["urls"] = {}
         meta["urls"] = {
             **meta["urls"],
@@ -53,22 +75,30 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
         }
         return Response(meta)
 
+    def get_serialized_meta(self):
+        return self.get_meta()
+
     @action(detail=False, url_path="_meta/parametrized")
     def parametrized_meta(self, request):
         params = self._parse_params(request)
         return Response(self.get_parametrized_meta(request, params))
 
     @action(detail=False, url_path="bounds")
-    def bounds(self, request):
+    def bounds(self, request):  # pylint: disable=unused-argument
         if not callable(self.get_bounds):
             raise BadRequest()
 
         params = self._parse_params(request)
-        bounds = self.get_bounds(params, request)  # pylint: disable=not-callable
-        return Response(BoundingBoxSerializer(bounds).data)
+        cache = Cache(self, request)
+        serialized_bounds = cache.get_serialized_bounds(params)
+        return Response(serialized_bounds)
+
+    def get_serialized_bounds(self, params):
+        bounds = self.get_bounds(params)  # pylint: disable=not-callable
+        return BoundingBoxSerializer(bounds).data
 
     @abstractmethod
-    def get_meta(self, request):
+    def get_meta(self):
         pass
 
     def get_parametrized_meta(self, request, params):  # pylint: disable=unused-argument
@@ -100,9 +130,9 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     def get_query_params(self):
         return self.query_params
 
-    def render_query_params_meta(self, request):
+    def render_query_params_meta(self):
         return {
-            param.name: param.render_meta(self, request)
+            param.name: param.render_meta(self, self.request)
             for param in self.get_query_params().values()
         }
 
@@ -143,7 +173,7 @@ class MapFeaturesBaseView(MapApiBaseView):
     preferred_viewport_handling: str = ViewportHandling.SPLIT
     preferred_viewport_chunks: int = 10
 
-    def get_bounds(self, params, request):  # pylint: disable=unused-argument
+    def get_bounds(self, params):
         viewport = EmptyViewport()
         items = self.get_items(viewport, params)
         return AutomaticBoundingBoxing().find_bounding_box(self, items)
@@ -158,7 +188,7 @@ class MapFeaturesBaseView(MapApiBaseView):
         )
         return urls
 
-    def get_meta(self, request):
+    def get_meta(self):
         return {
             "type": "Features",
             "id": self.api_id,
@@ -170,8 +200,8 @@ class MapFeaturesBaseView(MapApiBaseView):
             if isinstance(self.preferred_viewport_handling, ViewportHandling)
             else self.preferred_viewport_handling,
             "preferred_viewport_chunks": self.preferred_viewport_chunks,
-            "query_params": self.render_query_params_meta(request),
-            "requirements": self.render_requirements(request),
+            "query_params": self.render_query_params_meta(),
+            "requirements": self.render_requirements(),
         }
 
     def list(self, request):
@@ -198,6 +228,15 @@ class MapFeaturesBaseView(MapApiBaseView):
 
         params = self._parse_params(request)
 
+        cache = Cache(self, request)
+        serialized_items = cache.get_serialized_items(viewport, params)
+
+        response = {
+            "items": list(serialized_items),
+        }
+        return Response(response)
+
+    def get_serialized_items(self, viewport: BaseViewPort, params: dict):
         items = self.get_items(viewport, params)
 
         if self.clustering and viewport.clustering:
@@ -210,12 +249,9 @@ class MapFeaturesBaseView(MapApiBaseView):
                 items = items.iterator()
             serialized_items = (self.render_item(item) for item in items)
 
-        response = {
-            "items": list(serialized_items),
-        }
-        return Response(response)
+        return serialized_items
 
-    def render_requirements(self, request):  # pylint: disable=unused-argument
+    def render_requirements(self):  # pylint: disable=unused-argument
         requirements = []
         if self.require_viewport_size:
             requirements.append("viewport.size")
@@ -226,12 +262,18 @@ class MapFeaturesBaseView(MapApiBaseView):
         return requirements
 
     def retrieve(self, request, pk):  # pylint: disable=unused-argument
-        item = self.get_item(item_id=pk)  # pylint: disable=assignment-from-none
+        cache = Cache(self, request)
+        serialized_item = cache.get_serialized_item(pk)
+
+        response = {"item": serialized_item}
+        return Response(response)
+
+    def get_serialized_item(self, item_id):
+        item = self.get_item(item_id=item_id)  # pylint: disable=assignment-from-none
         if not item:
             raise Http404()
 
-        response = {"item": self.render_detailed_item(item)}
-        return Response(response)
+        return self.render_detailed_item(item)
 
     @abstractmethod
     def get_items(self, viewport: BaseViewPort, params: dict):
@@ -275,14 +317,14 @@ class MapTilesBaseView(MapApiBaseView):
         )
         return urls
 
-    def get_meta(self, request):
+    def get_meta(self):
         return {
             "type": "Tiles",
             "id": self.api_id,
             "name": self.display_name,
             "category": self.category,
             "icon": self.get_icon(),
-            "query_params": self.render_query_params_meta(request),
+            "query_params": self.render_query_params_meta(),
         }
 
     def make_pattern_url(self, action_name, kwargs):
@@ -301,10 +343,14 @@ class MapTilesBaseView(MapApiBaseView):
     )
     def tile(self, request, z, x, y):
         params = self._parse_params(request)
-        tile_bytes = self.get_tile(z, x, y, params)
+        cache = Cache(self, request)
+        tile_bytes = cache.get_tile_bytes(z, x, y, params)
         if not tile_bytes:
             return self.render_empty_response(request, z, x, y)
         return HttpResponse(tile_bytes, content_type="image/png")
+
+    def get_tile_bytes(self, z: int, x: int, y: int, params: dict):
+        return self.get_tile(z, x, y, params)
 
     @abstractmethod
     def get_tile(self, z: int, x: int, y: int, params: dict) -> bytes:

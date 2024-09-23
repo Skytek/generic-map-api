@@ -12,3 +12,9 @@ DATABASES = {
         "NAME": os.path.join(PROJECT_DIR, "test.db"),
     }
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.dummy.DummyCache",
+    },
+}

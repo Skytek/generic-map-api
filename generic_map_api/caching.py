@@ -41,7 +41,7 @@ class Cache:
                 f"{self.view.__class__.__module__}.{self.view.__class__.__name__}"
             )
 
-        context_str = json.dumps(context)
+        context_str = json.dumps(context, default=str)
         hasher = hashlib.sha256(context_str.encode("utf-8"))
         context_hash = b64encode(hasher.digest()).decode("utf-8")
 

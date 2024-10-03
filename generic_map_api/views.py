@@ -7,7 +7,7 @@ from typing import Callable, Optional, Tuple, Type
 
 from django.core.exceptions import BadRequest
 from django.db.models import QuerySet
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -19,7 +19,14 @@ from .clustering import BaseClustering, BasicClustering, ClusteringOutput
 from .constants import ViewportHandling
 from .serializers import BaseFeatureSerializer, BoundingBoxSerializer
 from .utils import to_bool
-from .values import BaseViewPort, BoundingBox, EmptyViewport, Tile, ViewPort
+from .values import (
+    BaseViewPort,
+    BoundingBox,
+    EmptyViewport,
+    Tile,
+    TileRedirect,
+    ViewPort,
+)
 
 
 class MapApiBaseMeta(ABCMeta):
@@ -52,6 +59,7 @@ class MapApiBaseView(ABC, ViewSet, metaclass=MapApiBaseMeta):
     cache_ttl_items = None
     cache_ttl_bounds = None
     cache_ttl_tile = None
+    cache_ttl_browser = None
 
     def get_caching_key_extra(
         self, fn_name, request, **context
@@ -202,6 +210,7 @@ class MapFeaturesBaseView(MapApiBaseView):
             "preferred_viewport_chunks": self.preferred_viewport_chunks,
             "query_params": self.render_query_params_meta(),
             "requirements": self.render_requirements(),
+            "browser_cache_salt": Cache(self, self.request).get_browser_caching_salt(),
         }
 
     def list(self, request):
@@ -234,7 +243,8 @@ class MapFeaturesBaseView(MapApiBaseView):
         response = {
             "items": list(serialized_items),
         }
-        return Response(response)
+        http_response = Response(response)
+        return cache.add_browser_cache_headers(http_response)
 
     def get_serialized_items(self, viewport: BaseViewPort, params: dict):
         items = self.get_items(viewport, params)
@@ -325,6 +335,7 @@ class MapTilesBaseView(MapApiBaseView):
             "category": self.category,
             "icon": self.get_icon(),
             "query_params": self.render_query_params_meta(),
+            "browser_cache_salt": Cache(self, self.request).get_browser_caching_salt(),
         }
 
     def make_pattern_url(self, action_name, kwargs):
@@ -342,12 +353,18 @@ class MapTilesBaseView(MapApiBaseView):
         trailing_slash=False,
     )
     def tile(self, request, z, x, y):
+        cache = Cache(self, request)
         params = self._parse_params(request)
         cache = Cache(self, request)
         tile_bytes = cache.get_tile_bytes(z, x, y, params)
         if not tile_bytes:
-            return self.render_empty_response(request, z, x, y)
-        return HttpResponse(tile_bytes, content_type="image/png")
+            response = self.render_empty_response(request, z, x, y)
+        elif isinstance(tile_bytes, TileRedirect):
+            response = HttpResponseRedirect(tile_bytes.url)
+        else:
+            response = HttpResponse(tile_bytes, content_type="image/png")
+
+        return cache.add_browser_cache_headers(response)
 
     def get_tile_bytes(self, z: int, x: int, y: int, params: dict):
         return self.get_tile(z, x, y, params)

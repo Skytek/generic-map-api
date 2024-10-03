@@ -205,3 +205,8 @@ class BoundingBox:
             ),
             count=count,
         )
+
+
+@dataclass
+class TileRedirect:
+    url: str

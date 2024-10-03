@@ -154,3 +154,26 @@ class Cache:
             if timeout is not NO_CACHE:
                 self._write_cache(key, value, timeout)
         return value
+
+    def get_browser_caching_salt(self):
+        extra = self.view.get_caching_key_extra("ITEMS", self.request)
+        if not extra:
+            return None
+
+        context_str = json.dumps(extra, default=str)
+        hasher = hashlib.sha256(context_str.encode("utf-8"))
+        salt = b64encode(hasher.digest()).decode("utf-8")[:10]
+
+        return salt
+
+    def add_browser_cache_headers(self, response):
+        cache_ttl = (
+            self.view.cache_ttl_browser
+            or self.view.cache_ttl_items
+            or self.view.cache_ttl
+        )
+        if cache_ttl is NO_CACHE:
+            return response
+
+        response["Cache-Control"] = f"max-age={cache_ttl}"
+        return response

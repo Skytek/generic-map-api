@@ -29,7 +29,7 @@ def all_meta(request):
     django_request = request._request  # pylint: disable=protected-access
     response = {
         "multi-meta": {
-            request.build_absolute_uri(url): meta
+            request.build_absolute_uri("/" + url): meta
             for url, meta in _get_all_meta(django_request)
         }
     }

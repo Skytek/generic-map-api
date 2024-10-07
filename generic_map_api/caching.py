@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Union
 
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
-from .values import BaseViewPort
+from .values import BaseViewPort, TileRedirect
 
 if TYPE_CHECKING:
     from .views import MapApiBaseView, MapFeaturesBaseView, MapTilesBaseView
@@ -147,10 +147,46 @@ class Cache:
                 coords=(x, y, z),
                 params=params,
             )
-            value = self._read_cache(key)
+            value_from_cache = self._read_cache(key)
+            if value_from_cache is not NO_VALUE:
+                if value_from_cache["type"] == "redirect":
+                    value = TileRedirect.from_cache(value_from_cache["data"])
+                else:
+                    value = value_from_cache["data"]
+            else:
+                value = value_from_cache
 
         if value is NO_VALUE:
             value = self.view.get_tile_bytes(z, x, y, params)
+
+            if isinstance(value, TileRedirect):
+                value_to_store = {"type": "redirect", "data": value.to_cache()}
+            else:
+                value_to_store = {"type": "bytes", "data": value}
+
             if timeout is not NO_CACHE:
-                self._write_cache(key, value, timeout)
+                self._write_cache(key, value_to_store, timeout)
         return value
+
+    def get_browser_caching_salt(self):
+        extra = self.view.get_caching_key_extra("ITEMS", self.request)
+        if not extra:
+            return None
+
+        context_str = json.dumps(extra, default=str)
+        hasher = hashlib.sha256(context_str.encode("utf-8"))
+        salt = b64encode(hasher.digest()).decode("utf-8")[:10]
+
+        return salt
+
+    def add_browser_cache_headers(self, response):
+        cache_ttl = (
+            self.view.cache_ttl_browser
+            or self.view.cache_ttl_items
+            or self.view.cache_ttl
+        )
+        if cache_ttl is NO_CACHE:
+            return response
+
+        response["Cache-Control"] = f"max-age={cache_ttl}"
+        return response

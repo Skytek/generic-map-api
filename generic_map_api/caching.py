@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Union
 
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
-from .values import BaseViewPort
+from .values import BaseViewPort, TileRedirect
 
 if TYPE_CHECKING:
     from .views import MapApiBaseView, MapFeaturesBaseView, MapTilesBaseView
@@ -147,12 +147,25 @@ class Cache:
                 coords=(x, y, z),
                 params=params,
             )
-            value = self._read_cache(key)
+            value_from_cache = self._read_cache(key)
+            if value_from_cache is not NO_VALUE:
+                if value_from_cache["type"] == "redirect":
+                    value = TileRedirect.from_cache(value_from_cache["data"])
+                else:
+                    value = value_from_cache["data"]
+            else:
+                value = value_from_cache
 
         if value is NO_VALUE:
             value = self.view.get_tile_bytes(z, x, y, params)
+
+            if isinstance(value, TileRedirect):
+                value_to_store = {"type": "redirect", "data": value.to_cache()}
+            else:
+                value_to_store = {"type": "bytes", "data": value}
+
             if timeout is not NO_CACHE:
-                self._write_cache(key, value, timeout)
+                self._write_cache(key, value_to_store, timeout)
         return value
 
     def get_browser_caching_salt(self):

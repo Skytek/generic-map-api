@@ -210,3 +210,10 @@ class BoundingBox:
 @dataclass
 class TileRedirect:
     url: str
+
+    def to_cache(self):
+        return {"url": self.url}
+
+    @classmethod
+    def from_cache(cls, data):
+        return cls(url=data["url"])

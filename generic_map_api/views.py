@@ -322,7 +322,7 @@ class MapTilesBaseView(MapApiBaseView):
                 "tile": self.make_pattern_url(
                     "tile",
                     kwargs={
-                        "format": self.default_image_format,
+                        "ext": self.default_image_format,
                     }
                     | {param: "{" + param + "}" for param in self.get_url_params()},
                 ),
@@ -352,29 +352,28 @@ class MapTilesBaseView(MapApiBaseView):
 
     @action(
         detail=False,
-        url_path=r"(?P<z>[^/.]+)/(?P<x>[^/.]+)/(?P<y>[^/.]+)\.(webp|jpg|jpeg|png)",
+        url_path=r"(?P<z>[^/.]+)/(?P<x>[^/.]+)/(?P<y>[^/.]+)\.(?P<ext>\w+)",
         trailing_slash=False,
     )
-    def tile(self, request, z, x, y):
-        file_format = request.path.split(".")[-1]
+    def tile(self, request, z, x, y, ext):  # pylint: disable=too-many-arguments
         cache = Cache(self, request)
         params = self._parse_params(request)
         cache = Cache(self, request)
         tile_bytes = cache.get_tile_bytes(z, x, y, params)
         if not tile_bytes:
-            response = self.render_empty_response(request, z, x, y, format)
+            response = self.render_empty_response(request, z, x, y, ext)
         elif isinstance(tile_bytes, TileRedirect):
             response = HttpResponseRedirect(tile_bytes.url)
         else:
             content_type = "application/octet-stream"
 
-            if file_format.lower() == "webp":
+            if ext.lower() == "webp":
                 content_type = "image/webp"
 
-            if file_format.lower() == "png":
+            if ext.lower() == "png":
                 content_type = "image/png"
 
-            if file_format.lower() in ("jpg", "jpeg"):
+            if ext.lower() in ("jpg", "jpeg"):
                 content_type = "image/jpeg"
 
             response = HttpResponse(tile_bytes, content_type=content_type)
@@ -389,16 +388,16 @@ class MapTilesBaseView(MapApiBaseView):
         pass
 
     def render_empty_response(
-        self, request, z, x, y, file_format
+        self, request, z, x, y, ext
     ):  # pylint: disable=unused-argument, too-many-arguments
         file_name = "empty_tile.webp"
         content_type = "image/webp"
 
-        if file_format.lower() == "png":
+        if ext.lower() == "png":
             file_name = "empty_tile.png"
             content_type = "image/png"
 
-        elif file_format.lower() in ("jpeg", "jpg"):
+        elif ext.lower() in ("jpeg", "jpg"):
             file_name = "empty_tile.jpeg"
             content_type = "image/jpeg"
 
